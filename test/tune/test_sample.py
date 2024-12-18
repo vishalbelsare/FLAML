@@ -1,18 +1,18 @@
+from flaml.tune import choice
 from flaml.tune.sample import (
     BaseSampler,
-    PolynomialExpansionSet,
     Domain,
-    uniform,
-    quniform,
-    choice,
-    randint,
-    qrandint,
-    randn,
-    qrandn,
-    loguniform,
-    qloguniform,
+    PolynomialExpansionSet,
     lograndint,
+    loguniform,
     qlograndint,
+    qloguniform,
+    qrandint,
+    qrandn,
+    quniform,
+    randint,
+    randn,
+    uniform,
 )
 
 
@@ -22,6 +22,8 @@ def test_sampler():
     print(qrandn(2, 10, 2).sample(size=2))
     c = choice([1, 2])
     print(c.domain_str, len(c), c.is_valid(3))
+    c = choice([1, 2], order=False)
+    print(c.domain_str, len(c), c.ordered)
     i = randint(1, 10)
     print(i.domain_str, i.is_valid(10))
     d = Domain()

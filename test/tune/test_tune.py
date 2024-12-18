@@ -1,24 +1,87 @@
 """Require: pip install flaml[test,ray]
 """
-from flaml.searcher.blendsearch import BlendSearch
-import time
+import logging
+import math
 import os
-from sklearn.model_selection import train_test_split
-import sklearn.metrics
+import sys
+import time
+
+import pytest
 import sklearn.datasets
+import sklearn.metrics
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+
+from flaml import CFO, BlendSearch
 
 try:
     from ray.tune.integration.xgboost import TuneReportCheckpointCallback
 except ImportError:
     print("skip test_xgboost because ray tune cannot be imported.")
-import xgboost as xgb
 
-import logging
 
 logger = logging.getLogger(__name__)
 os.makedirs("logs", exist_ok=True)
 logger.addHandler(logging.FileHandler("logs/tune.log"))
 logger.setLevel(logging.INFO)
+
+
+def _BraninCurrin(config):
+    # Rescale brain
+    x_1 = 15 * config["x1"] - 5
+    x_2 = 15 * config["x2"]
+    # Brain function
+    t1 = x_2 - 5.1 / (4 * math.pi**2) * x_1**2 + 5 / math.pi * x_1 - 6
+    t2 = 10 * (1 - 1 / (8 * math.pi)) * math.cos(x_1)
+    brain_result = t1**2 + t2 + 10
+    # Currin function
+    xc_1 = config["x1"]
+    xc_2 = config["x2"]
+    factor1 = 1 - math.exp(-1 / (2 * xc_2))
+    numer = 2300 * pow(xc_1, 3) + 1900 * pow(xc_1, 2) + 2092 * xc_1 + 60
+    denom = 100 * pow(xc_1, 3) + 500 * pow(xc_1, 2) + 4 * xc_1 + 20
+    currin_result = factor1 * numer / denom
+    return {"brain": brain_result, "currin": currin_result}
+
+
+def _easy_objective(config):
+    # Hyperparameters
+    width, height, step = config["width"], config["height"], config["steps"]
+
+    # get_result
+    return {"mean_loss": (0.1 + width * step / 100) ** (-1) + height * 0.1}
+
+
+def test_nested_run():
+    from flaml import AutoML, tune
+
+    data, labels = sklearn.datasets.load_breast_cancer(return_X_y=True)
+    train_x, val_x, y_train, y_val = train_test_split(data, labels, test_size=0.25)
+    space_pca = {
+        "n_components": tune.uniform(0.5, 0.99),
+    }
+
+    def pca_flaml(config):
+        n_components = config["n_components"]
+        from sklearn.decomposition import PCA
+
+        pca = PCA(n_components)
+        X_train = pca.fit_transform(train_x)
+        X_val = pca.transform(val_x)
+        automl = AutoML()
+        automl.fit(X_train, y_train, X_val=X_val, y_val=y_val, time_budget=1)
+        return {"loss": automl.best_loss}
+
+    analysis = tune.run(
+        pca_flaml,
+        space_pca,
+        metric="loss",
+        mode="min",
+        num_samples=5,
+        log_file_name="logs/create/nested.log",
+        verbose=3,
+    )
+    print(analysis.best_result)
 
 
 def train_breast_cancer(config: dict):
@@ -54,9 +117,7 @@ def _test_xgboost(method="BlendSearch"):
     else:
         from ray import tune
     search_space = {
-        "max_depth": tune.randint(1, 9)
-        if method in ["BlendSearch", "BOHB", "Optuna"]
-        else tune.randint(1, 9),
+        "max_depth": tune.randint(1, 9) if method in ["BlendSearch", "BOHB", "Optuna"] else tune.randint(1, 9),
         "min_child_weight": tune.choice([1, 2, 3]),
         "subsample": tune.uniform(0.5, 1.0),
         "eta": tune.loguniform(1e-4, 1e-1),
@@ -64,10 +125,8 @@ def _test_xgboost(method="BlendSearch"):
     max_iter = 10
     for num_samples in [128]:
         time_budget_s = 60
-        for n_cpu in [4]:
+        for n_cpu in [2]:
             start_time = time.time()
-            ray.shutdown()
-            ray.init(num_cpus=n_cpu, num_gpus=0)
             # ray.init(address='auto')
             if method == "BlendSearch":
                 analysis = tune.run(
@@ -116,7 +175,7 @@ def _test_xgboost(method="BlendSearch"):
                         },
                     )
                 elif "CFOCat" == method:
-                    from flaml.searcher.cfo_cat import CFOCat
+                    from flaml.tune.searcher.cfo_cat import CFOCat
 
                     algo = CFOCat(
                         low_cost_partial_config={
@@ -135,8 +194,8 @@ def _test_xgboost(method="BlendSearch"):
 
                     algo = SkOptSearch()
                 elif "Nevergrad" == method:
-                    from ray.tune.suggest.nevergrad import NevergradSearch
                     import nevergrad as ng
+                    from ray.tune.suggest.nevergrad import NevergradSearch
 
                     algo = NevergradSearch(optimizer=ng.optimizers.OnePlusOne)
                 elif "ZOOpt" == method:
@@ -169,7 +228,6 @@ def _test_xgboost(method="BlendSearch"):
                     scheduler=scheduler,
                     search_alg=algo,
                 )
-            ray.shutdown()
             # # Load the best model checkpoint
             # import os
             # best_bst = xgb.Booster()
@@ -186,8 +244,8 @@ def _test_xgboost(method="BlendSearch"):
             logger.info(f"Best model parameters: {best_trial.config}")
 
 
-def test_nested():
-    from flaml import tune, CFO
+def test_nested_space():
+    from flaml import CFO, tune
 
     search_space = {
         # test nested search space
@@ -198,9 +256,7 @@ def test_nested():
     }
 
     def simple_func(config):
-        obj = (config["cost_related"]["a"] - 4) ** 2 + (
-            config["b"] - config["cost_related"]["a"]
-        ) ** 2
+        obj = (config["cost_related"]["a"] - 4) ** 2 + (config["b"] - config["cost_related"]["a"]) ** 2
         tune.report(obj=obj)
         tune.report(obj=obj, ab=config["cost_related"]["a"] * config["b"])
 
@@ -227,26 +283,27 @@ def test_nested():
     logger.info(f"CFO best config: {best_trial.config}")
     logger.info(f"CFO best result: {best_trial.last_result}")
 
+    bs = BlendSearch(
+        experimental=True,
+        space=search_space,
+        metric="obj",
+        mode="min",
+        low_cost_partial_config={"cost_related": {"a": 1}},
+        points_to_evaluate=[
+            {"b": 0.99, "cost_related": {"a": 3}},
+            {"b": 0.99, "cost_related": {"a": 2}},
+            {"cost_related": {"a": 8}},
+        ],
+        metric_constraints=[("ab", "<=", 4)],
+    )
     analysis = tune.run(
         simple_func,
-        search_alg=BlendSearch(
-            experimental=True,
-            space=search_space,
-            metric="obj",
-            mode="min",
-            low_cost_partial_config={"cost_related": {"a": 1}},
-            points_to_evaluate=[
-                {"b": 0.99, "cost_related": {"a": 3}},
-                {"b": 0.99, "cost_related": {"a": 2}},
-                {"cost_related": {"a": 8}},
-            ],
-            metric_constraints=[("ab", "<=", 4)],
-        ),
+        search_alg=bs,
         local_dir="logs/",
         num_samples=-1,
         time_budget_s=1,
     )
-
+    print(bs.results)
     best_trial = analysis.get_best_trial()
     logger.info(f"BlendSearch exp best config: {best_trial.config}")
     logger.info(f"BlendSearch exp best result: {best_trial.last_result}")
@@ -254,6 +311,7 @@ def test_nested():
     points_to_evaluate = [
         {"b": 0.99, "cost_related": {"a": 3}},
         {"b": 0.99, "cost_related": {"a": 2}},
+        {"cost_related": {"a": 8}},
     ]
     analysis = tune.run(
         simple_func,
@@ -261,9 +319,8 @@ def test_nested():
         low_cost_partial_config={"cost_related": {"a": 1}},
         points_to_evaluate=points_to_evaluate,
         evaluated_rewards=[
-            (config["cost_related"]["a"] - 4) ** 2
-            + (config["b"] - config["cost_related"]["a"]) ** 2
-            for config in points_to_evaluate
+            (config["cost_related"]["a"] - 4) ** 2 + (config["b"] - config["cost_related"]["a"]) ** 2
+            for config in points_to_evaluate[:-1]
         ],
         metric="obj",
         mode="min",
@@ -310,6 +367,86 @@ def test_run_training_function_return_value():
         },
         num_samples=100,
         mode="max",
+    )
+
+    # Test empty return value
+    def evaluate_config_empty(config):
+        return {}
+
+    tune.run(
+        evaluate_config_empty,
+        config={
+            "x": tune.qloguniform(lower=1, upper=100000, q=1),
+            "y": tune.qlograndint(lower=2, upper=100000, q=2),
+        },
+        num_samples=10,
+        mode="max",
+    )
+
+
+def test_passing_search_alg():
+    from flaml import tune
+
+    # search_space
+    so_search_space = {
+        "steps": 100,
+        "width": tune.uniform(0, 20),
+        "height": tune.uniform(-100, 100),
+    }
+    mo_search_space = {
+        "x1": tune.uniform(lower=0.000001, upper=1.0),
+        "x2": tune.uniform(lower=0.000001, upper=1.0),
+    }
+
+    # lexicographic objectives
+    lexico_objectives = {}
+    lexico_objectives["metrics"] = ["brain", "currin"]
+    lexico_objectives["tolerances"] = {"brain": 10.0, "currin": 0.0}
+    lexico_objectives["targets"] = {"brain": 0.0, "currin": 0.0}
+    lexico_objectives["modes"] = ["min", "min"]
+
+    ## Passing search_alg through string
+    # Non lexico tune
+    tune.run(
+        _easy_objective,
+        search_alg="BlendSearch",
+        metric="mean_loss",
+        mode="min",
+        num_samples=10,
+        config=so_search_space,
+    )
+    # lexico tune
+    tune.run(
+        _BraninCurrin, search_alg="CFO", num_samples=10, config=mo_search_space, lexico_objectives=lexico_objectives
+    )
+    tune.run(
+        _BraninCurrin,
+        search_alg="BlendSearch",
+        num_samples=10,
+        config=mo_search_space,
+        lexico_objectives=lexico_objectives,
+    )
+
+    ## Passing search_alg through instance
+    so_bs = BlendSearch(time_budget_s=5, metric="mean_loss", mode="min")
+    # TODO: We will change CFO into blendsearch in the future
+    mo_bs = CFO(time_budget_s=5)
+    # Non lexico tune
+    tune.run(
+        _easy_objective,
+        search_alg=so_bs,
+        metric="mean_loss",
+        mode="min",
+        num_samples=10,
+        config=so_search_space,
+    )
+    # lexico tune
+    tune.run(
+        _BraninCurrin,
+        search_alg=mo_bs,
+        num_samples=10,
+        config=mo_search_space,
+        lexico_objectives=lexico_objectives,
     )
 
 
@@ -362,4 +499,8 @@ def _test_xgboost_bohb():
 
 
 if __name__ == "__main__":
+    test_nested_run()
+    test_nested_space()
+    test_run_training_function_return_value()
+    test_passing_search_alg()
     test_xgboost_bs()

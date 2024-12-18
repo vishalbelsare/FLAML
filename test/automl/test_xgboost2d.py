@@ -2,10 +2,10 @@ import unittest
 
 from sklearn.datasets import fetch_openml
 from sklearn.model_selection import train_test_split
-from flaml.automl import AutoML
-from flaml.model import XGBoostSklearnEstimator
-from flaml import tune
 
+from flaml import tune
+from flaml.automl import AutoML
+from flaml.automl.model import XGBoostSklearnEstimator
 
 dataset = "credit-g"
 
@@ -49,19 +49,20 @@ def test_simple(method=None):
         from sklearn.datasets import load_wine
 
         X, y = load_wine(return_X_y=True)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.33, random_state=42
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
     automl.fit(X_train=X_train, y_train=y_train, **automl_settings)
     print(automl.estimator_list)
     print(automl.search_space)
     print(automl.points_to_evaluate)
+    if not automl.best_config:
+        return
     config = automl.best_config.copy()
     config["learner"] = automl.best_estimator
     automl.trainable(config)
+    from functools import partial
+
     from flaml import tune
     from flaml.automl import size
-    from functools import partial
 
     analysis = tune.run(
         automl.trainable,
@@ -75,7 +76,7 @@ def test_simple(method=None):
         min_resource=automl.min_resource,
         max_resource=automl.max_resource,
         time_budget_s=automl._state.time_budget,
-        config_constraints=[(partial(size, automl._state), "<=", automl._mem_thres)],
+        config_constraints=[(partial(size, automl._state.learner_classes), "<=", automl._mem_thres)],
         metric_constraints=automl.metric_constraints,
         num_samples=5,
     )

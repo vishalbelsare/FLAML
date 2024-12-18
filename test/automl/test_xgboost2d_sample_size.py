@@ -2,10 +2,10 @@ import unittest
 
 from sklearn.datasets import fetch_openml
 from sklearn.model_selection import train_test_split
-from flaml.automl import AutoML
-from flaml.model import XGBoostSklearnEstimator
-from flaml import tune
 
+from flaml import tune
+from flaml.automl import AutoML
+from flaml.automl.model import XGBoostSklearnEstimator
 
 dataset = "credit-g"
 
@@ -31,9 +31,7 @@ def _test_simple(method=None, size_ratio=1.0):
     automl.add_learner(learner_name="XGBoost2D", learner_class=XGBoost2D)
 
     X, y = fetch_openml(name=dataset, return_X_y=True)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.33, random_state=42
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
 
     final_size = int(len(y_train) * size_ratio)
     X_train = X_train[:final_size]

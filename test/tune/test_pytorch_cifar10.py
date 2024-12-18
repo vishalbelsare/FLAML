@@ -1,10 +1,10 @@
 """Require: pip install torchvision ray flaml[blendsearch]
 """
+import logging
 import os
 import time
-import numpy as np
 
-import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
 os.makedirs("logs", exist_ok=True)
@@ -17,14 +17,14 @@ try:
     import torch.nn as nn
     import torch.nn.functional as F
     import torch.optim as optim
-    from torch.utils.data import random_split
     import torchvision
     import torchvision.transforms as transforms
+    from torch.utils.data import random_split
 
     # __net_begin__
     class Net(nn.Module):
         def __init__(self, l1=120, l2=84):
-            super(Net, self).__init__()
+            super().__init__()
             self.conv1 = nn.Conv2d(3, 6, 5)
             self.pool = nn.MaxPool2d(2, 2)
             self.conv2 = nn.Conv2d(6, 16, 5)
@@ -42,23 +42,18 @@ try:
             return x
 
     # __net_end__
+
 except ImportError:
     print("skip test_pytorch because torchvision cannot be imported.")
 
 
 # __load_data_begin__
 def load_data(data_dir="test/data"):
-    transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
-    )
+    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    trainset = torchvision.datasets.CIFAR10(
-        root=data_dir, train=True, download=True, transform=transform
-    )
+    trainset = torchvision.datasets.CIFAR10(root=data_dir, train=True, download=True, transform=transform)
 
-    testset = torchvision.datasets.CIFAR10(
-        root=data_dir, train=False, download=True, transform=transform
-    )
+    testset = torchvision.datasets.CIFAR10(root=data_dir, train=False, download=True, transform=transform)
 
     return trainset, testset
 
@@ -93,9 +88,7 @@ def train_cifar(config, checkpoint_dir=None, data_dir=None):
     trainset, testset = load_data(data_dir)
 
     test_abs = int(len(trainset) * 0.8)
-    train_subset, val_subset = random_split(
-        trainset, [test_abs, len(trainset) - test_abs]
-    )
+    train_subset, val_subset = random_split(trainset, [test_abs, len(trainset) - test_abs])
 
     trainloader = torch.utils.data.DataLoader(
         train_subset,
@@ -112,9 +105,7 @@ def train_cifar(config, checkpoint_dir=None, data_dir=None):
 
     from ray import tune
 
-    for epoch in range(
-        int(round(config["num_epochs"]))
-    ):  # loop over the dataset multiple times
+    for epoch in range(int(round(config["num_epochs"]))):  # loop over the dataset multiple times
         running_loss = 0.0
         epoch_steps = 0
         for i, data in enumerate(trainloader, 0):
@@ -135,10 +126,7 @@ def train_cifar(config, checkpoint_dir=None, data_dir=None):
             running_loss += loss.item()
             epoch_steps += 1
             if i % 2000 == 1999:  # print every 2000 mini-batches
-                print(
-                    "[%d, %5d] loss: %.3f"
-                    % (epoch + 1, i + 1, running_loss / epoch_steps)
-                )
+                print("[%d, %5d] loss: %.3f" % (epoch + 1, i + 1, running_loss / epoch_steps))
                 running_loss = 0.0
 
         # Validation loss
@@ -178,9 +166,7 @@ def train_cifar(config, checkpoint_dir=None, data_dir=None):
 def _test_accuracy(net, device="cpu"):
     trainset, testset = load_data()
 
-    testloader = torch.utils.data.DataLoader(
-        testset, batch_size=4, shuffle=False, num_workers=2
-    )
+    testloader = torch.utils.data.DataLoader(testset, batch_size=4, shuffle=False, num_workers=2)
 
     correct = 0
     total = 0
@@ -200,9 +186,7 @@ def _test_accuracy(net, device="cpu"):
 
 
 # __main_begin__
-def cifar10_main(
-    method="BlendSearch", num_samples=10, max_num_epochs=100, gpus_per_trial=1
-):
+def cifar10_main(method="BlendSearch", num_samples=10, max_num_epochs=100, gpus_per_trial=1):
     data_dir = os.path.abspath("test/data")
     load_data(data_dir)  # Download data for all trials before starting the run
     if method == "BlendSearch":
@@ -268,8 +252,8 @@ def cifar10_main(
                 }
             )
         elif "Nevergrad" == method:
-            from ray.tune.suggest.nevergrad import NevergradSearch
             import nevergrad as ng
+            from ray.tune.suggest.nevergrad import NevergradSearch
 
             algo = NevergradSearch(optimizer=ng.optimizers.OnePlusOne)
         if method != "BOHB":
@@ -293,17 +277,9 @@ def cifar10_main(
     logger.info(f"#trials={len(result.trials)}")
     logger.info(f"time={time.time()-start_time}")
     best_trial = result.get_best_trial("loss", "min", "all")
-    logger.info("Best trial config: {}".format(best_trial.config))
-    logger.info(
-        "Best trial final validation loss: {}".format(
-            best_trial.metric_analysis["loss"]["min"]
-        )
-    )
-    logger.info(
-        "Best trial final validation accuracy: {}".format(
-            best_trial.metric_analysis["accuracy"]["max"]
-        )
-    )
+    logger.info(f"Best trial config: {best_trial.config}")
+    logger.info("Best trial final validation loss: {}".format(best_trial.metric_analysis["loss"]["min"]))
+    logger.info("Best trial final validation accuracy: {}".format(best_trial.metric_analysis["accuracy"]["max"]))
 
     best_trained_model = Net(2 ** best_trial.config["l1"], 2 ** best_trial.config["l2"])
     device = "cpu"
@@ -313,13 +289,14 @@ def cifar10_main(
             best_trained_model = nn.DataParallel(best_trained_model)
     best_trained_model.to(device)
 
-    checkpoint_path = os.path.join(best_trial.checkpoint.value, "checkpoint")
+    checkpoint_value = getattr(best_trial.checkpoint, "dir_or_data", None) or best_trial.checkpoint.value
+    checkpoint_path = os.path.join(checkpoint_value, "checkpoint")
 
     model_state, optimizer_state = torch.load(checkpoint_path)
     best_trained_model.load_state_dict(model_state)
 
     test_acc = _test_accuracy(best_trained_model, device)
-    logger.info("Best trial test set accuracy: {}".format(test_acc))
+    logger.info(f"Best trial test set accuracy: {test_acc}")
 
 
 # __main_end__

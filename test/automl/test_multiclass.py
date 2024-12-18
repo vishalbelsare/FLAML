@@ -1,22 +1,25 @@
 import unittest
+
 import numpy as np
 import scipy.sparse
 from sklearn.datasets import load_iris, load_wine
 
-
-from flaml import AutoML
-from flaml.data import CLASSIFICATION, get_output_from_log
-from flaml.model import LGBMEstimator, XGBoostSklearnEstimator, SKLearnEstimator
-from flaml import tune
-from flaml.training_log import training_log_reader
+from flaml import AutoML, tune
+from flaml.automl.data import get_output_from_log
+from flaml.automl.model import LGBMEstimator, SKLearnEstimator, XGBoostSklearnEstimator
+from flaml.automl.training_log import training_log_reader
 
 
 class MyRegularizedGreedyForest(SKLearnEstimator):
     def __init__(self, task="binary", **config):
-
         super().__init__(task, **config)
 
-        if task in CLASSIFICATION:
+        if isinstance(task, str):
+            from flaml.automl.task.factory import task_factory
+
+            task = task_factory(task)
+
+        if task.is_classification():
             from rgf.sklearn import RGFClassifier
 
             self.estimator_class = RGFClassifier
@@ -54,8 +57,8 @@ class MyRegularizedGreedyForest(SKLearnEstimator):
 
     @classmethod
     def size(cls, config):
-        max_leaves = int(round(config["max_leaf"]))
-        n_estimators = int(round(config["n_iter"]))
+        max_leaves = int(round(config.get("max_leaf", 1)))
+        n_estimators = int(round(config.get("n_iter", 1)))
         return (max_leaves * 3 + (max_leaves - 1) * 4 + 1.0) * n_estimators * 8
 
     @classmethod
@@ -110,8 +113,9 @@ def custom_metric(
     groups_val=None,
     groups_train=None,
 ):
-    from sklearn.metrics import log_loss
     import time
+
+    from sklearn.metrics import log_loss
 
     start = time.time()
     y_pred = estimator.predict_proba(X_val)
@@ -141,14 +145,22 @@ class TestMultiClass(unittest.TestCase):
             "log_training_metric": True,  # whether to log training metric
             "n_jobs": 1,
         }
-
-        """The main flaml automl API"""
         automl.fit(X_train=X_train, y_train=y_train, **settings)
         # print the best model found for RGF
         print(automl.best_model_for_estimator("RGF"))
 
         MyRegularizedGreedyForest.search_space = lambda data_size, task: {}
         automl.fit(X_train=X_train, y_train=y_train, **settings)
+
+        try:
+            import ray
+
+            del settings["time_budget"]
+            settings["max_iter"] = 5
+            # test the "_choice_" issue when using ray
+            automl.fit(X_train=X_train, y_train=y_train, n_concurrent_trials=2, **settings)
+        except ImportError:
+            return
 
     def test_ensemble(self):
         automl = AutoML()
@@ -167,8 +179,6 @@ class TestMultiClass(unittest.TestCase):
             },
             "n_jobs": 1,
         }
-
-        """The main flaml automl API"""
         automl.fit(X_train=X_train, y_train=y_train, **settings)
 
     def test_dataframe(self):
@@ -177,8 +187,7 @@ class TestMultiClass(unittest.TestCase):
     def test_custom_metric(self):
         df, y = load_iris(return_X_y=True, as_frame=True)
         df["label"] = y
-        automl_experiment = AutoML()
-        automl_settings = {
+        settings = {
             "dataframe": df,
             "label": "label",
             "time_budget": 5,
@@ -194,17 +203,16 @@ class TestMultiClass(unittest.TestCase):
             "pred_time_limit": 1e-5,
             "ensemble": True,
         }
-        automl_experiment.fit(**automl_settings)
-        print(automl_experiment.classes_)
-        print(automl_experiment.model)
-        print(automl_experiment.config_history)
-        print(automl_experiment.best_model_for_estimator("rf"))
-        print(automl_experiment.best_iteration)
-        print(automl_experiment.best_estimator)
-        automl_experiment = AutoML()
-        estimator = automl_experiment.get_estimator_from_log(
-            automl_settings["log_file_name"], record_id=0, task="multi"
-        )
+        automl = AutoML(**settings)  # test safe_json_dumps
+        automl.fit(dataframe=df, label="label")
+        print(automl.classes_)
+        print(automl.model)
+        print(automl.config_history)
+        print(automl.best_model_for_estimator("rf"))
+        print(automl.best_iteration)
+        print(automl.best_estimator)
+        automl = AutoML()
+        estimator = automl.get_estimator_from_log(settings["log_file_name"], record_id=0, task="multiclass")
         print(estimator)
         (
             time_history,
@@ -212,10 +220,20 @@ class TestMultiClass(unittest.TestCase):
             valid_loss_history,
             config_history,
             metric_history,
-        ) = get_output_from_log(
-            filename=automl_settings["log_file_name"], time_budget=6
-        )
+        ) = get_output_from_log(filename=settings["log_file_name"], time_budget=6)
         print(metric_history)
+        try:
+            import ray
+
+            df = ray.put(df)
+            settings["dataframe"] = df
+            settings["use_ray"] = True
+            del settings["time_budget"]
+            settings["max_iter"] = 2
+            automl.fit(**settings)
+            estimator = automl.get_estimator_from_log(settings["log_file_name"], record_id=1, task="multiclass")
+        except ImportError:
+            pass
 
     def test_classification(self, as_frame=False):
         automl_experiment = AutoML()
@@ -268,19 +286,15 @@ class TestMultiClass(unittest.TestCase):
             "model_history": True,
         }
         X_train, y_train = load_iris(return_X_y=True)
-        automl_experiment_micro.fit(
-            X_train=X_train, y_train=y_train, metric="micro_f1", **automl_settings
-        )
-        automl_experiment_macro.fit(
-            X_train=X_train, y_train=y_train, metric="macro_f1", **automl_settings
-        )
+        automl_experiment_micro.fit(X_train=X_train, y_train=y_train, metric="micro_f1", **automl_settings)
+        automl_experiment_macro.fit(X_train=X_train, y_train=y_train, metric="macro_f1", **automl_settings)
         estimator = automl_experiment_macro.model
         y_pred = estimator.predict(X_train)
         y_pred_proba = estimator.predict_proba(X_train)
-        from flaml.ml import norm_confusion_matrix, multi_class_curves
+        from flaml.automl.ml import multi_class_curves, norm_confusion_matrix
 
         print(norm_confusion_matrix(y_train, y_pred))
-        from sklearn.metrics import roc_curve, precision_recall_curve
+        from sklearn.metrics import precision_recall_curve, roc_curve
 
         print(multi_class_curves(y_train, y_pred_proba, roc_curve))
         print(multi_class_curves(y_train, y_pred_proba, precision_recall_curve))
@@ -315,6 +329,34 @@ class TestMultiClass(unittest.TestCase):
         X_train, y_train = load_iris(return_X_y=True)
         automl_experiment.fit(X_train=X_train, y_train=y_train, **automl_settings)
 
+    def test_roc_auc_ovr_weighted(self):
+        automl = AutoML()
+        settings = {
+            "time_budget": 1,
+            "metric": "roc_auc_ovr_weighted",
+            "task": "classification",
+            "log_file_name": "test/roc_auc_weighted.log",
+            "log_training_metric": True,
+            "n_jobs": 1,
+            "model_history": True,
+        }
+        X_train, y_train = load_iris(return_X_y=True)
+        automl.fit(X_train=X_train, y_train=y_train, **settings)
+
+    def test_roc_auc_ovo_weighted(self):
+        automl_experiment = AutoML()
+        automl_settings = {
+            "time_budget": 1,
+            "metric": "roc_auc_ovo_weighted",
+            "task": "classification",
+            "log_file_name": "test/roc_auc_weighted.log",
+            "log_training_metric": True,
+            "n_jobs": 1,
+            "model_history": True,
+        }
+        X_train, y_train = load_iris(return_X_y=True)
+        automl_experiment.fit(X_train=X_train, y_train=y_train, **automl_settings)
+
     def test_sparse_matrix_classification(self):
         automl_experiment = AutoML()
         automl_settings = {
@@ -339,9 +381,7 @@ class TestMultiClass(unittest.TestCase):
 
     def _test_memory_limit(self):
         automl_experiment = AutoML()
-        automl_experiment.add_learner(
-            learner_name="large_lgbm", learner_class=MyLargeLGBM
-        )
+        automl_experiment.add_learner(learner_name="large_lgbm", learner_class=MyLargeLGBM)
         automl_settings = {
             "time_budget": -1,
             "task": "classification",
@@ -349,22 +389,17 @@ class TestMultiClass(unittest.TestCase):
             "estimator_list": ["large_lgbm"],
             "log_type": "all",
             "hpo_method": "random",
+            "free_mem_ratio": 0.2,
         }
         X_train, y_train = load_iris(return_X_y=True, as_frame=True)
 
-        automl_experiment.fit(
-            X_train=X_train, y_train=y_train, max_iter=1, **automl_settings
-        )
+        automl_experiment.fit(X_train=X_train, y_train=y_train, max_iter=1, **automl_settings)
         print(automl_experiment.model)
 
     def test_time_limit(self):
         automl_experiment = AutoML()
-        automl_experiment.add_learner(
-            learner_name="large_lgbm", learner_class=MyLargeLGBM
-        )
-        automl_experiment.add_learner(
-            learner_name="large_xgb", learner_class=MyLargeXGB
-        )
+        automl_experiment.add_learner(learner_name="large_lgbm", learner_class=MyLargeLGBM)
+        automl_experiment.add_learner(learner_name="large_xgb", learner_class=MyLargeXGB)
         automl_settings = {
             "time_budget": 0.5,
             "task": "classification",
@@ -383,10 +418,10 @@ class TestMultiClass(unittest.TestCase):
         automl_experiment.fit(X_train=X_train, y_train=y_train, **automl_settings)
         print(automl_experiment.model)
 
-    def test_fit_w_starting_point(self, as_frame=True):
-        automl_experiment = AutoML()
-        automl_settings = {
-            "time_budget": 3,
+    def test_fit_w_starting_point(self, as_frame=True, n_concurrent_trials=1):
+        automl = AutoML()
+        settings = {
+            "max_iter": 3,
             "metric": "accuracy",
             "task": "classification",
             "log_file_name": "test/iris.log",
@@ -399,21 +434,17 @@ class TestMultiClass(unittest.TestCase):
             # test drop column
             X_train.columns = range(X_train.shape[1])
             X_train[X_train.shape[1]] = np.zeros(len(y_train))
-        automl_experiment.fit(X_train=X_train, y_train=y_train, **automl_settings)
-        automl_val_accuracy = 1.0 - automl_experiment.best_loss
-        print("Best ML leaner:", automl_experiment.best_estimator)
-        print("Best hyperparmeter config:", automl_experiment.best_config)
-        print("Best accuracy on validation data: {0:.4g}".format(automl_val_accuracy))
-        print(
-            "Training duration of best run: {0:.4g} s".format(
-                automl_experiment.best_config_train_time
-            )
-        )
+        automl.fit(X_train=X_train, y_train=y_train, n_concurrent_trials=n_concurrent_trials, **settings)
+        automl_val_accuracy = 1.0 - automl.best_loss
+        print("Best ML leaner:", automl.best_estimator)
+        print("Best hyperparmeter config:", automl.best_config)
+        print(f"Best accuracy on validation data: {automl_val_accuracy:.4g}")
+        print(f"Training duration of best run: {automl.best_config_train_time:.4g} s")
 
-        starting_points = automl_experiment.best_config_per_estimator
+        starting_points = automl.best_config_per_estimator
         print("starting_points", starting_points)
-        print("loss of the starting_points", automl_experiment.best_loss_per_estimator)
-        automl_settings_resume = {
+        print("loss of the starting_points", automl.best_loss_per_estimator)
+        settings_resume = {
             "time_budget": 2,
             "metric": "accuracy",
             "task": "classification",
@@ -424,27 +455,28 @@ class TestMultiClass(unittest.TestCase):
             "log_type": "all",
             "starting_points": starting_points,
         }
-        new_automl_experiment = AutoML()
-        new_automl_experiment.fit(
-            X_train=X_train, y_train=y_train, **automl_settings_resume
-        )
+        new_automl = AutoML()
+        new_automl.fit(X_train=X_train, y_train=y_train, **settings_resume)
 
-        new_automl_val_accuracy = 1.0 - new_automl_experiment.best_loss
-        print("Best ML leaner:", new_automl_experiment.best_estimator)
-        print("Best hyperparmeter config:", new_automl_experiment.best_config)
-        print(
-            "Best accuracy on validation data: {0:.4g}".format(new_automl_val_accuracy)
-        )
-        print(
-            "Training duration of best run: {0:.4g} s".format(
-                new_automl_experiment.best_config_train_time
-            )
-        )
+        new_automl_val_accuracy = 1.0 - new_automl.best_loss
+        print("Best ML leaner:", new_automl.best_estimator)
+        print("Best hyperparmeter config:", new_automl.best_config)
+        print(f"Best accuracy on validation data: {new_automl_val_accuracy:.4g}")
+        print(f"Training duration of best run: {new_automl.best_config_train_time:.4g} s")
 
-    def test_fit_w_starting_points_list(self, as_frame=True):
-        automl_experiment = AutoML()
-        automl_settings = {
-            "time_budget": 3,
+    def test_fit_w_starting_point_2(self, as_frame=True):
+        try:
+            import ray
+
+            self.test_fit_w_starting_points_list(as_frame, 2)
+            self.test_fit_w_starting_point(as_frame, 2)
+        except ImportError:
+            pass
+
+    def test_fit_w_starting_points_list(self, as_frame=True, n_concurrent_trials=1):
+        automl = AutoML()
+        settings = {
+            "max_iter": 3,
             "metric": "accuracy",
             "task": "classification",
             "log_file_name": "test/iris.log",
@@ -457,28 +489,27 @@ class TestMultiClass(unittest.TestCase):
             # test drop column
             X_train.columns = range(X_train.shape[1])
             X_train[X_train.shape[1]] = np.zeros(len(y_train))
-        automl_experiment.fit(X_train=X_train, y_train=y_train, **automl_settings)
-        automl_val_accuracy = 1.0 - automl_experiment.best_loss
-        print("Best ML leaner:", automl_experiment.best_estimator)
-        print("Best hyperparmeter config:", automl_experiment.best_config)
-        print("Best accuracy on validation data: {0:.4g}".format(automl_val_accuracy))
-        print(
-            "Training duration of best run: {0:.4g} s".format(
-                automl_experiment.best_config_train_time
-            )
-        )
+        automl.fit(X_train=X_train, y_train=y_train, n_concurrent_trials=n_concurrent_trials, **settings)
+        automl_val_accuracy = 1.0 - automl.best_loss
+        print("Best ML leaner:", automl.best_estimator)
+        print("Best hyperparmeter config:", automl.best_config)
+        print(f"Best accuracy on validation data: {automl_val_accuracy:.4g}")
+        print(f"Training duration of best run: {automl.best_config_train_time:.4g} s")
 
         starting_points = {}
-        log_file_name = automl_settings["log_file_name"]
+        log_file_name = settings["log_file_name"]
         with training_log_reader(log_file_name) as reader:
+            sample_size = 1000
             for record in reader.records():
                 config = record.config
+                config["FLAML_sample_size"] = sample_size
+                sample_size += 1000
                 learner = record.learner
                 if learner not in starting_points:
                     starting_points[learner] = []
                 starting_points[learner].append(config)
-        max_iter = sum([len(s) for k, s in starting_points.items()])
-        automl_settings_resume = {
+        max_iter = sum(len(s) for k, s in starting_points.items())
+        settings_resume = {
             "time_budget": 2,
             "metric": "accuracy",
             "task": "classification",
@@ -491,17 +522,13 @@ class TestMultiClass(unittest.TestCase):
             "starting_points": starting_points,
             "append_log": True,
         }
-        new_automl_experiment = AutoML()
-        new_automl_experiment.fit(
-            X_train=X_train, y_train=y_train, **automl_settings_resume
-        )
+        new_automl = AutoML()
+        new_automl.fit(X_train=X_train, y_train=y_train, **settings_resume)
 
-        new_automl_val_accuracy = 1.0 - new_automl_experiment.best_loss
-        # print('Best ML leaner:', new_automl_experiment.best_estimator)
-        # print('Best hyperparmeter config:', new_automl_experiment.best_config)
-        print(
-            "Best accuracy on validation data: {0:.4g}".format(new_automl_val_accuracy)
-        )
+        new_automl_val_accuracy = 1.0 - new_automl.best_loss
+        # print('Best ML leaner:', new_automl.best_estimator)
+        # print('Best hyperparmeter config:', new_automl.best_config)
+        print(f"Best accuracy on validation data: {new_automl_val_accuracy:.4g}")
         # print('Training duration of best run: {0:.4g} s'.format(new_automl_experiment.best_config_train_time))
 
 

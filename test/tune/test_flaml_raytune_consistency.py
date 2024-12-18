@@ -1,9 +1,10 @@
 # import unittest
-import numpy as np
-
 # require: pip install flaml[blendsearch, ray]
 # require: pip install flaml[ray]
 import time
+
+import numpy as np
+
 from flaml import tune
 
 
@@ -28,12 +29,10 @@ low_cost_partial_config = {"x": 1}
 
 
 def setup_searcher(searcher_name):
-    from flaml.searcher.blendsearch import BlendSearch, CFO, RandomSearch
+    from flaml.tune.searcher.blendsearch import CFO, BlendSearch, RandomSearch
 
     if "cfo" in searcher_name:
-        searcher = CFO(
-            space=config_search_space, low_cost_partial_config=low_cost_partial_config
-        )
+        searcher = CFO(space=config_search_space, low_cost_partial_config=low_cost_partial_config)
     elif searcher_name == "bs":
         searcher = BlendSearch(
             metric="metric",
@@ -48,17 +47,18 @@ def setup_searcher(searcher_name):
     return searcher
 
 
-def _test_flaml_raytune_consistency(
-    num_samples=-1, max_concurrent_trials=1, searcher_name="cfo"
-):
+def _test_flaml_raytune_consistency(num_samples=-1, max_concurrent_trials=1, searcher_name="cfo"):
     try:
+        from ray import __version__ as ray_version
         from ray import tune as raytune
+
+        if ray_version.startswith("1."):
+            from ray.tune.suggest import ConcurrencyLimiter
+        else:
+            from ray.tune.search import ConcurrencyLimiter
     except ImportError:
-        print(
-            "skip _test_flaml_raytune_consistency because ray tune cannot be imported."
-        )
+        print("skip _test_flaml_raytune_consistency because ray tune cannot be imported.")
         return
-    np.random.seed(100)
     searcher = setup_searcher(searcher_name)
     analysis = tune.run(
         evaluate_config,  # the function to evaluate a config
@@ -75,13 +75,10 @@ def _test_flaml_raytune_consistency(
     )
     flaml_best_config = analysis.best_config
     flaml_config_in_results = [v["config"] for v in analysis.results.values()]
+    flaml_time_in_results = [v["time_total_s"] for v in analysis.results.values()]
     print(analysis.best_trial.last_result)  # the best trial's result
-    print("best flaml", searcher_name, flaml_best_config)  # the best config
-    print("flaml config in results", searcher_name, flaml_config_in_results)
 
-    np.random.seed(100)
     searcher = setup_searcher(searcher_name)
-    from ray.tune.suggest import ConcurrencyLimiter
 
     search_alg = ConcurrencyLimiter(searcher, max_concurrent_trials)
     analysis = raytune.run(
@@ -97,25 +94,25 @@ def _test_flaml_raytune_consistency(
     )
     ray_best_config = analysis.best_config
     ray_config_in_results = [v["config"] for v in analysis.results.values()]
+    ray_time_in_results = [v["time_total_s"] for v in analysis.results.values()]
+
     print(analysis.best_trial.last_result)  # the best trial's result
-    print("ray best", searcher_name, analysis.best_config)  # the best config
+    print("time_total_s in flaml", flaml_time_in_results)  # the best trial's result
+    print("time_total_s in ray", ray_time_in_results)  # the best trial's result
+
+    print("best flaml", searcher_name, flaml_best_config)  # the best config
+    print("ray best", searcher_name, ray_best_config)  # the best config
+
+    print("flaml config in results", searcher_name, flaml_config_in_results)
     print("ray config in results", searcher_name, ray_config_in_results)
     assert ray_best_config == flaml_best_config, "best config should be the same"
-    assert (
-        flaml_config_in_results == ray_config_in_results
-    ), "results from raytune and flaml should be the same"
+    assert flaml_config_in_results == ray_config_in_results, "results from raytune and flaml should be the same"
 
 
 def test_consistency():
-    _test_flaml_raytune_consistency(
-        num_samples=5, max_concurrent_trials=1, searcher_name="random"
-    )
-    _test_flaml_raytune_consistency(
-        num_samples=5, max_concurrent_trials=1, searcher_name="cfo"
-    )
-    _test_flaml_raytune_consistency(
-        num_samples=5, max_concurrent_trials=1, searcher_name="bs"
-    )
+    _test_flaml_raytune_consistency(num_samples=5, max_concurrent_trials=1, searcher_name="random")
+    _test_flaml_raytune_consistency(num_samples=5, max_concurrent_trials=1, searcher_name="cfo")
+    _test_flaml_raytune_consistency(num_samples=5, max_concurrent_trials=1, searcher_name="bs")
 
 
 if __name__ == "__main__":
