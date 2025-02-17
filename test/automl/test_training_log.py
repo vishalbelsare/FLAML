@@ -5,12 +5,11 @@ from tempfile import TemporaryDirectory
 from sklearn.datasets import fetch_california_housing
 
 from flaml import AutoML
-from flaml.training_log import training_log_reader
+from flaml.automl.training_log import training_log_reader
 
 
 class TestTrainingLog(unittest.TestCase):
-    def test_training_log(self, path="test_training_log.log", estimator_list="auto"):
-
+    def test_training_log(self, path="test_training_log.log", estimator_list="auto", use_ray=False):
         with TemporaryDirectory() as d:
             filename = os.path.join(d, path)
 
@@ -38,10 +37,12 @@ class TestTrainingLog(unittest.TestCase):
             if automl.best_estimator:
                 estimator, config = automl.best_estimator, automl.best_config
                 model0 = automl.best_model_for_estimator(estimator)
-                print(model0.params["n_estimators"], config)
+                print(model0.params)
+                if "n_estimators" in config:
+                    assert model0.params["n_estimators"] == config["n_estimators"]
 
                 # train on full data with no time limit
-                automl._state.time_budget = None
+                automl._state.time_budget = -1
                 model, _ = automl._state._train_with_config(estimator, config)
 
                 # assuming estimator & config are saved and loaded as follows
@@ -54,17 +55,16 @@ class TestTrainingLog(unittest.TestCase):
                     estimator_list=[estimator],
                     n_jobs=1,
                     starting_points={estimator: config},
+                    use_ray=use_ray,
                 )
                 print(automl.best_config)
                 # then the fitted model should be equivalent to model
                 assert (
                     str(model.estimator) == str(automl.model.estimator)
                     or estimator == "xgboost"
-                    and str(model.estimator.get_dump())
-                    == str(automl.model.estimator.get_dump())
+                    and str(model.estimator.get_dump()) == str(automl.model.estimator.get_dump())
                     or estimator == "catboost"
-                    and str(model.estimator.get_all_params())
-                    == str(automl.model.estimator.get_all_params())
+                    and str(model.estimator.get_all_params()) == str(automl.model.estimator.get_all_params())
                 )
                 automl.fit(
                     X_train=X_train,
@@ -86,7 +86,8 @@ class TestTrainingLog(unittest.TestCase):
 
             automl_settings["log_file_name"] = ""
             automl.fit(X_train=X_train, y_train=y_train, **automl_settings)
-            automl._selected.update(None, 0)
+            if automl._selected:
+                automl._selected.update(None, 0)
             automl = AutoML()
             automl.fit(X_train=X_train, y_train=y_train, max_iter=0, task="regression")
 
@@ -97,10 +98,20 @@ class TestTrainingLog(unittest.TestCase):
             print("IsADirectoryError happens as expected in linux.")
         except PermissionError:
             print("PermissionError happens as expected in windows.")
+        except FileExistsError:
+            print("FileExistsError happens as expected in MacOS.")
 
     def test_each_estimator(self):
-        self.test_training_log(estimator_list=["xgboost"])
-        self.test_training_log(estimator_list=["catboost"])
-        self.test_training_log(estimator_list=["extra_tree"])
-        self.test_training_log(estimator_list=["rf"])
-        self.test_training_log(estimator_list=["lgbm"])
+        try:
+            import ray
+
+            ray.shutdown()
+            ray.init()
+            use_ray = True
+        except ImportError:
+            use_ray = False
+        self.test_training_log(estimator_list=["xgboost"], use_ray=use_ray)
+        self.test_training_log(estimator_list=["catboost"], use_ray=use_ray)
+        self.test_training_log(estimator_list=["extra_tree"], use_ray=use_ray)
+        self.test_training_log(estimator_list=["rf"], use_ray=use_ray)
+        self.test_training_log(estimator_list=["lgbm"], use_ray=use_ray)

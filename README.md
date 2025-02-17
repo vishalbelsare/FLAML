@@ -1,213 +1,143 @@
 [![PyPI version](https://badge.fury.io/py/FLAML.svg)](https://badge.fury.io/py/FLAML)
 ![Conda version](https://img.shields.io/conda/vn/conda-forge/flaml)
 [![Build](https://github.com/microsoft/FLAML/actions/workflows/python-package.yml/badge.svg)](https://github.com/microsoft/FLAML/actions/workflows/python-package.yml)
-![Python Version](https://img.shields.io/badge/3.6%20%7C%203.7%20%7C%203.8%20%7C%203.9-blue)
-[![Downloads](https://pepy.tech/badge/flaml/month)](https://pepy.tech/project/flaml)
-[![Join the chat at https://gitter.im/FLAMLer/community](https://badges.gitter.im/FLAMLer/community.svg)](https://gitter.im/FLAMLer/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/FLAML)](https://pypi.org/project/FLAML/)
+[![Downloads](https://pepy.tech/badge/flaml)](https://pepy.tech/project/flaml)
+[![](https://img.shields.io/discord/1025786666260111483?logo=discord&style=flat)](https://discord.gg/Cppx2vSPVP)
 
-# FLAML - Fast and Lightweight AutoML
+<!-- [![Join the chat at https://gitter.im/FLAMLer/community](https://badges.gitter.im/FLAMLer/community.svg)](https://gitter.im/FLAMLer/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) -->
+
+# A Fast Library for Automated Machine Learning & Tuning
 
 <p align="center">
-    <img src="https://github.com/microsoft/FLAML/blob/main/docs/images/FLAML.png"  width=200>
+    <img src="https://github.com/microsoft/FLAML/blob/main/website/static/img/flaml.svg"  width=200>
     <br>
 </p>
 
-FLAML is a lightweight Python library that finds accurate machine
-learning models automatically, efficiently and economically. It frees users from selecting
-learners and hyperparameters for each learner. It is fast and economical.
-The simple and lightweight design makes it easy to extend, such as
-adding customized learners or metrics. FLAML is powered by a new, [cost-effective
-hyperparameter optimization](https://github.com/microsoft/FLAML/tree/main/flaml/tune)
-and learner selection method invented by Microsoft Research.
-FLAML leverages the structure of the search space to choose a search order optimized for both cost and error. For example, the system tends to propose cheap configurations at the beginning stage of the search,
-but quickly moves to configurations with high model complexity and large sample size when needed in the later stage of the search. For another example, it favors cheap learners in the beginning but penalizes them later if the error improvement is slow. The cost-bounded search and cost-based prioritization make a big difference in the search efficiency under budget constraints.
+:fire: FLAML supports AutoML and Hyperparameter Tuning in [Microsoft Fabric Data Science](https://learn.microsoft.com/en-us/fabric/data-science/automated-machine-learning-fabric). In addition, we've introduced Python 3.11 support, along with a range of new estimators, and comprehensive integration with MLflow—thanks to contributions from the Microsoft Fabric product team.
 
-FLAML has a .NET implementation as well from [ML.NET Model Builder](https://dotnet.microsoft.com/apps/machinelearning-ai/ml-dotnet/model-builder). This [ML.NET blog](https://devblogs.microsoft.com/dotnet/ml-net-june-updates/#new-and-improved-automl) describes the improvement brought by FLAML.
+:fire: Heads-up: We have migrated [AutoGen](https://microsoft.github.io/autogen/) into a dedicated [github repository](https://github.com/microsoft/autogen). Alongside this move, we have also launched a dedicated [Discord](https://discord.gg/pAbnFJrkgZ) server and a [website](https://microsoft.github.io/autogen/) for comprehensive documentation.
+
+:fire: The automated multi-agent chat framework in [AutoGen](https://microsoft.github.io/autogen/) is in preview from v2.0.0.
+
+:fire: FLAML is highlighted in OpenAI's [cookbook](https://github.com/openai/openai-cookbook#related-resources-from-around-the-web).
+
+:fire: [autogen](https://microsoft.github.io/autogen/) is released with support for ChatGPT and GPT-4, based on [Cost-Effective Hyperparameter Optimization for Large Language Model Generation Inference](https://arxiv.org/abs/2303.04673).
+
+## What is FLAML
+
+FLAML is a lightweight Python library for efficient automation of machine
+learning and AI operations. It automates workflow based on large language models, machine learning models, etc.
+and optimizes their performance.
+
+- FLAML enables building next-gen GPT-X applications based on multi-agent conversations with minimal effort. It simplifies the orchestration, automation and optimization of a complex GPT-X workflow. It maximizes the performance of GPT-X models and augments their weakness.
+- For common machine learning tasks like classification and regression, it quickly finds quality models for user-provided data with low computational resources. It is easy to customize or extend. Users can find their desired customizability from a smooth range.
+- It supports fast and economical automatic tuning (e.g., inference hyperparameters for foundation models, configurations in MLOps/LMOps workflows, pipelines, mathematical/statistical models, algorithms, computing experiments, software configurations), capable of handling large search space with heterogeneous evaluation cost and complex constraints/guidance/early stopping.
+
+FLAML is powered by a series of [research studies](https://microsoft.github.io/FLAML/docs/Research/) from Microsoft Research and collaborators such as Penn State University, Stevens Institute of Technology, University of Washington, and University of Waterloo.
+
+FLAML has a .NET implementation in [ML.NET](http://dot.net/ml), an open-source, cross-platform machine learning framework for .NET.
 
 ## Installation
 
-FLAML requires **Python version >= 3.6**. It can be installed from pip:
+FLAML requires **Python version >= 3.8**. It can be installed from pip:
 
 ```bash
 pip install flaml
 ```
 
-To run the [`notebook example`](https://github.com/microsoft/FLAML/tree/main/notebook),
-install flaml with the [notebook] option:
+Minimal dependencies are installed without extra options. You can install extra options based on the feature you need. For example, use the following to install the dependencies needed by the [`autogen`](https://microsoft.github.io/autogen/) package.
 
 ```bash
-pip install flaml[notebook]
+pip install "flaml[autogen]"
 ```
+
+Find more options in [Installation](https://microsoft.github.io/FLAML/docs/Installation).
+Each of the [`notebook examples`](https://github.com/microsoft/FLAML/tree/main/notebook) may require a specific option to be installed.
 
 ## Quickstart
 
-* With three lines of code, you can start using this economical and fast
-AutoML engine as a scikit-learn style estimator.
+- (New) The [autogen](https://microsoft.github.io/autogen/) package enables the next-gen GPT-X applications with a generic multi-agent conversation framework.
+  It offers customizable and conversable agents which integrate LLMs, tools and human.
+  By automating chat among multiple capable agents, one can easily make them collectively perform tasks autonomously or with human feedback, including tasks that require using tools via code. For example,
+
+```python
+from flaml import autogen
+
+assistant = autogen.AssistantAgent("assistant")
+user_proxy = autogen.UserProxyAgent("user_proxy")
+user_proxy.initiate_chat(
+    assistant,
+    message="Show me the YTD gain of 10 largest technology companies as of today.",
+)
+# This initiates an automated chat between the two agents to solve the task
+```
+
+Autogen also helps maximize the utility out of the expensive LLMs such as ChatGPT and GPT-4. It offers a drop-in replacement of `openai.Completion` or `openai.ChatCompletion` with powerful functionalites like tuning, caching, templating, filtering. For example, you can optimize generations by LLM with your own tuning data, success metrics and budgets.
+
+```python
+# perform tuning
+config, analysis = autogen.Completion.tune(
+    data=tune_data,
+    metric="success",
+    mode="max",
+    eval_func=eval_func,
+    inference_budget=0.05,
+    optimization_budget=3,
+    num_samples=-1,
+)
+# perform inference for a test instance
+response = autogen.Completion.create(context=test_instance, **config)
+```
+
+- With three lines of code, you can start using this economical and fast
+  AutoML engine as a [scikit-learn style estimator](https://microsoft.github.io/FLAML/docs/Use-Cases/Task-Oriented-AutoML).
 
 ```python
 from flaml import AutoML
+
 automl = AutoML()
 automl.fit(X_train, y_train, task="classification")
 ```
 
-* You can restrict the learners and use FLAML as a fast hyperparameter tuning
-tool for XGBoost, LightGBM, Random Forest etc. or a customized learner.
+- You can restrict the learners and use FLAML as a fast hyperparameter tuning
+  tool for XGBoost, LightGBM, Random Forest etc. or a [customized learner](https://microsoft.github.io/FLAML/docs/Use-Cases/Task-Oriented-AutoML#estimator-and-search-space).
 
 ```python
 automl.fit(X_train, y_train, task="classification", estimator_list=["lgbm"])
 ```
 
-* You can also run generic ray-tune style hyperparameter tuning for a custom function.
+- You can also run generic hyperparameter tuning for a [custom function](https://microsoft.github.io/FLAML/docs/Use-Cases/Tune-User-Defined-Function).
 
 ```python
 from flaml import tune
-tune.run(train_with_config, config={…}, low_cost_partial_config={…}, time_budget_s=3600)
+tune.run(evaluation_function, config={…}, low_cost_partial_config={…}, time_budget_s=3600)
 ```
 
-## Advantages
-
-* For common machine learning tasks like classification and regression, find quality models with small computational resources.
-* Users can choose their desired customizability: minimal customization (computational resource budget), medium customization (e.g., scikit-style learner, search space and metric), full customization (arbitrary training and evaluation code).
-* Allow human guidance in hyperparameter tuning to respect prior on certain subspaces but also able to explore other subspaces. Read more about the
-hyperparameter optimization methods
-in FLAML [here](https://github.com/microsoft/FLAML/tree/main/flaml/tune). They can be used beyond the AutoML context.
-And they can be used in distributed HPO frameworks such as ray tune or nni.
-* Support online AutoML: automatic hyperparameter tuning for online learning algorithms. Read more about the online AutoML method in FLAML [here](https://github.com/microsoft/FLAML/tree/main/flaml/onlineml).
-
-## Examples
-
-* A basic classification example.
+- [Zero-shot AutoML](https://microsoft.github.io/FLAML/docs/Use-Cases/Zero-Shot-AutoML) allows using the existing training API from lightgbm, xgboost etc. while getting the benefit of AutoML in choosing high-performance hyperparameter configurations per task.
 
 ```python
-from flaml import AutoML
-from sklearn.datasets import load_iris
-# Initialize an AutoML instance
-automl = AutoML()
-# Specify automl goal and constraint
-automl_settings = {
-    "time_budget": 10,  # in seconds
-    "metric": 'accuracy',
-    "task": 'classification',
-    "log_file_name": "iris.log",
-}
-X_train, y_train = load_iris(return_X_y=True)
-# Train with labeled input data
-automl.fit(X_train=X_train, y_train=y_train,
-           **automl_settings)
-# Predict
-print(automl.predict_proba(X_train))
-# Print the best model
-print(automl.model.estimator)
+from flaml.default import LGBMRegressor
+
+# Use LGBMRegressor in the same way as you use lightgbm.LGBMRegressor.
+estimator = LGBMRegressor()
+# The hyperparameters are automatically set according to the training data.
+estimator.fit(X_train, y_train)
 ```
-
-* A basic regression example.
-
-```python
-from flaml import AutoML
-from sklearn.datasets import fetch_california_housing
-# Initialize an AutoML instance
-automl = AutoML()
-# Specify automl goal and constraint
-automl_settings = {
-    "time_budget": 10,  # in seconds
-    "metric": 'r2',
-    "task": 'regression',
-    "log_file_name": "california.log",
-}
-X_train, y_train = fetch_california_housing(return_X_y=True)
-# Train with labeled input data
-automl.fit(X_train=X_train, y_train=y_train,
-           **automl_settings)
-# Predict
-print(automl.predict(X_train))
-# Print the best model
-print(automl.model.estimator)
-```
-
-* A basic time series forecasting example.
-
-```python
-# pip install "flaml[ts_forecast]"
-import numpy as np
-from flaml import AutoML
-X_train = np.arange('2014-01', '2021-01', dtype='datetime64[M]')
-y_train = np.random.random(size=72)
-automl = AutoML()
-automl.fit(X_train=X_train[:72],  # a single column of timestamp
-           y_train=y_train,  # value for each timestamp
-           period=12,  # time horizon to forecast, e.g., 12 months
-           task='ts_forecast', time_budget=15,  # time budget in seconds
-           log_file_name="ts_forecast.log",
-          )
-print(automl.predict(X_train[72:]))
-```
-
-* Learning to rank.
-
-```python
-from sklearn.datasets import fetch_openml
-from flaml import AutoML
-X_train, y_train = fetch_openml(name="credit-g", return_X_y=True, as_frame=False)
-# not a real learning to rank dataaset
-groups = [200] * 4 + [100] * 2    # group counts
-automl = AutoML()
-automl.fit(
-    X_train, y_train, groups=groups,
-    task='rank', time_budget=10,    # in seconds
-)
-```
-
-* Fine tuning language model.
-
-```python
-# pip install "flaml[nlp]"
-from flaml import AutoML
-from datasets import load_dataset
-
-train_dataset = load_dataset("glue", "mrpc", split="train").to_pandas()
-dev_dataset = load_dataset("glue", "mrpc", split="validation").to_pandas()
-test_dataset = load_dataset("glue", "mrpc", split="test").to_pandas()
-custom_sent_keys = ["sentence1", "sentence2"]
-label_key = "label"
-X_train, y_train = train_dataset[custom_sent_keys], train_dataset[label_key]
-X_val, y_val = dev_dataset[custom_sent_keys], dev_dataset[label_key]
-X_test = test_dataset[custom_sent_keys]
-
-automl = AutoML()
-automl_settings = {
-    "time_budget": 100,
-    "task": "seq-classification",
-    "custom_hpo_args": {"output_dir": "data/output/"},
-    "gpu_per_trial": 1,  # set to 0 if no GPU is available
-}
-automl.fit(X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val, **automl_settings)
-automl.predict(X_test)
-```
-
-More examples can be found in [notebooks](https://github.com/microsoft/FLAML/tree/main/notebook/).
 
 ## Documentation
 
-Please find the API documentation [here](https://microsoft.github.io/FLAML/).
+You can find a detailed documentation about FLAML [here](https://microsoft.github.io/FLAML/).
 
-Please find demo and tutorials of FLAML [here](https://www.youtube.com/channel/UCfU0zfFXHXdAd5x-WvFBk5A).
+In addition, you can find:
 
-For more technical details, please check our papers.
+- [Research](https://microsoft.github.io/FLAML/docs/Research) and [blogposts](https://microsoft.github.io/FLAML/blog) around FLAML.
 
-* [FLAML: A Fast and Lightweight AutoML Library](https://www.microsoft.com/en-us/research/publication/flaml-a-fast-and-lightweight-automl-library/). Chi Wang, Qingyun Wu, Markus Weimer, Erkang Zhu. MLSys 2021.
+- [Discord](https://discord.gg/Cppx2vSPVP).
 
-```bibtex
-@inproceedings{wang2021flaml,
-    title={FLAML: A Fast and Lightweight AutoML Library},
-    author={Chi Wang and Qingyun Wu and Markus Weimer and Erkang Zhu},
-    year={2021},
-    booktitle={MLSys},
-}
-```
+- [Contributing guide](https://microsoft.github.io/FLAML/docs/Contribute).
 
-* [Frugal Optimization for Cost-related Hyperparameters](https://arxiv.org/abs/2005.01571). Qingyun Wu, Chi Wang, Silu Huang. AAAI 2021.
-* [Economical Hyperparameter Optimization With Blended Search Strategy](https://www.microsoft.com/en-us/research/publication/economical-hyperparameter-optimization-with-blended-search-strategy/). Chi Wang, Qingyun Wu, Silu Huang, Amin Saied. ICLR 2021.
-* [ChaCha for Online AutoML](https://www.microsoft.com/en-us/research/publication/chacha-for-online-automl/). Qingyun Wu, Chi Wang, John Langford, Paul Mineiro and Marco Rossi. ICML 2021.
+- ML.NET documentation and tutorials for [Model Builder](https://learn.microsoft.com/dotnet/machine-learning/tutorials/predict-prices-with-model-builder), [ML.NET CLI](https://learn.microsoft.com/dotnet/machine-learning/tutorials/sentiment-analysis-cli), and [AutoML API](https://learn.microsoft.com/dotnet/machine-learning/how-to-guides/how-to-use-the-automl-api).
 
 ## Contributing
 
@@ -225,53 +155,8 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
 contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
-## Developing
+## Contributors Wall
 
-### Setup
-
-```bash
-git clone https://github.com/microsoft/FLAML.git
-pip install -e .[test,notebook]
-```
-
-### Docker
-
-We provide a simple [Dockerfile](https://github.com/microsoft/FLAML/blob/main/Dockerfile).
-
-```bash
-docker build git://github.com/microsoft/FLAML -t flaml-dev
-docker run -it flaml-dev
-```
-
-### Develop in Remote Container
-
-If you use vscode, you can open the FLAML folder in a [Container](https://code.visualstudio.com/docs/remote/containers).
-We have provided the configuration in [.devcontainer]((https://github.com/microsoft/FLAML/blob/main/.devcontainer)).
-
-### Pre-commit
-
-Run `pre-commit install` to install pre-commit into your git hooks. Before you commit, run
-`pre-commit run` to check if you meet the pre-commit requirements. If you use Windows (without WSL) and can't commit after installing pre-commit, you can run `pre-commit uninstall` to uninstall the hook. In WSL or Linux this is supposed to work.
-
-### Coverage
-
-Any code you commit should not decrease coverage. To run all unit tests:
-
-```bash
-coverage run -m pytest test
-```
-
-Then you can see the coverage report by
-`coverage report -m` or `coverage html`.
-If all the tests are passed, please also test run notebook/flaml_automl to make sure your commit does not break the notebook example.
-
-## Authors
-
-* Chi Wang
-* Qingyun Wu
-
-Contributors (alphabetical order): Amir Aghaei, Vijay Aski, Sebastien Bubeck, Surajit Chaudhuri, Nadiia Chepurko, Ofer Dekel, Alex Deng, Anshuman Dutt, Nicolo Fusi, Jianfeng Gao, Johannes Gehrke, Niklas Gustafsson, Silu Huang, Dongwoo Kim, Christian Konig, John Langford, Menghao Li, Mingqin Li, Zhe Liu, Naveen Gaur, Paul Mineiro, Vivek Narasayya, Jake Radzikowski, Marco Rossi, Amin Saied, Neil Tenenholtz, Olga Vrousgou, Markus Weimer, Yue Wang, Qingyun Wu, Qiufeng Yin, Haozhe Zhang, Minjia Zhang, XiaoYun Zhang, Eric Zhu, and open-source contributors.
-
-## License
-
-[MIT License](LICENSE)
+<a href="https://github.com/microsoft/flaml/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=microsoft/flaml&max=204" />
+</a>

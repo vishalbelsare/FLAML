@@ -15,11 +15,12 @@
 # This source file is adapted here because ray does not fully support Windows.
 
 # Copyright (c) Microsoft Corporation.
-from typing import Dict, Optional
-import numpy as np
-from .trial import Trial
-
 import logging
+from typing import Dict, Optional
+
+import numpy as np
+
+from .trial import Trial
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,6 @@ class ExperimentAnalysis:
     @property
     def results(self) -> Dict[str, Dict]:
         """Get the last result of all the trials of the experiment"""
-
         return {trial.trial_id: trial.last_result for trial in self.trials}
 
     def _validate_metric(self, metric: str) -> str:
@@ -122,23 +122,19 @@ class ExperimentAnalysis:
         """
         metric = self._validate_metric(metric)
         mode = self._validate_mode(mode)
-
         if scope not in ["all", "last", "avg", "last-5-avg", "last-10-avg"]:
             raise ValueError(
                 "ExperimentAnalysis: attempting to get best trial for "
                 'metric {} for scope {} not in ["all", "last", "avg", '
                 '"last-5-avg", "last-10-avg"]. '
                 "If you didn't pass a `metric` parameter to `tune.run()`, "
-                "you have to pass one when fetching the best trial.".format(
-                    metric, scope
-                )
+                "you have to pass one when fetching the best trial.".format(metric, scope)
             )
         best_trial = None
         best_metric_score = None
         for trial in self.trials:
             if metric not in trial.metric_analysis:
                 continue
-
             if scope in ["last", "avg", "last-5-avg", "last-10-avg"]:
                 metric_score = trial.metric_analysis[metric][scope]
             else:
@@ -158,12 +154,8 @@ class ExperimentAnalysis:
             elif (mode == "min") and (best_metric_score > metric_score):
                 best_metric_score = metric_score
                 best_trial = trial
-
         if not best_trial:
-            logger.warning(
-                "Could not find best trial. Did you pass the correct `metric` "
-                "parameter?"
-            )
+            logger.warning("Could not find best trial. Did you pass the correct `metric` " "parameter?")
         return best_trial
 
     def get_best_config(
@@ -195,3 +187,20 @@ class ExperimentAnalysis:
         """
         best_trial = self.get_best_trial(metric, mode, scope)
         return best_trial.config if best_trial else None
+
+    @property
+    def best_result(self) -> Dict:
+        """Get the last result of the best trial of the experiment
+        The best trial is determined by comparing the last trial results
+        using the `metric` and `mode` parameters passed to `tune.run()`.
+        If you didn't pass these parameters, use
+        `get_best_trial(metric, mode, scope).last_result` instead.
+        """
+        if not self.default_metric or not self.default_mode:
+            raise ValueError(
+                "To fetch the `best_result`, pass a `metric` and `mode` "
+                "parameter to `tune.run()`. Alternatively, use "
+                "`get_best_trial(metric, mode).last_result` to set "
+                "the metric and mode explicitly and fetch the last result."
+            )
+        return self.best_trial.last_result

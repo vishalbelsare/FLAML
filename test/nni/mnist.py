@@ -8,9 +8,10 @@ This file is a modification of the official pytorch mnist example:
 https://github.com/pytorch/examples/blob/master/mnist/main.py
 """
 
-import os
 import argparse
 import logging
+import os
+
 import nni
 import torch
 import torch.nn as nn
@@ -24,7 +25,7 @@ logger = logging.getLogger("mnist_AutoML")
 
 class Net(nn.Module):
     def __init__(self, hidden_size):
-        super(Net, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(1, 20, 5, 1)
         self.conv2 = nn.Conv2d(20, 50, 5, 1)
         self.fc1 = nn.Linear(4 * 4 * 50, hidden_size)
@@ -107,25 +108,21 @@ def main(args):
             data_dir,
             train=True,
             download=True,
-            transform=transforms.Compose(
-                [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
-            ),
+            transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]),
         ),
         batch_size=args["batch_size"],
         shuffle=True,
-        **kwargs
+        **kwargs,
     )
     test_loader = torch.utils.data.DataLoader(
         datasets.MNIST(
             data_dir,
             train=False,
-            transform=transforms.Compose(
-                [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
-            ),
+            transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]),
         ),
         batch_size=1000,
         shuffle=True,
-        **kwargs
+        **kwargs,
     )
 
     hidden_size = args["hidden_size"]
@@ -188,12 +185,8 @@ def get_params():
         metavar="N",
         help="number of epochs to train (default: 10)",
     )
-    parser.add_argument(
-        "--seed", type=int, default=1, metavar="S", help="random seed (default: 1)"
-    )
-    parser.add_argument(
-        "--no_cuda", action="store_true", default=False, help="disables CUDA training"
-    )
+    parser.add_argument("--seed", type=int, default=1, metavar="S", help="random seed (default: 1)")
+    parser.add_argument("--no_cuda", action="store_true", default=False, help="disables CUDA training")
     parser.add_argument(
         "--log_interval",
         type=int,
